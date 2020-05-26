@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=RIDE
+Comment=Robot Framework
+Exec=ride.py
+Icon=preferences-desktop-theme
+Path=$HOME
+Terminal=false
+StartupNotify=false

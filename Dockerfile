@@ -1,5 +1,5 @@
 FROM ubuntu:18.04 as base
-LABEL maintainer="Daniel Guerra"
+LABEL maintainer="thyarles@gmail.com"
 
 # Versions
 ARG XRDP_VER="0.9.10"
@@ -43,27 +43,25 @@ RUN dpkg-buildpackage -rfakeroot -uc -b
 RUN dpkg -i /tmp/xorgxrdp_"${XORGXRDP_VER}"-1_amd64.deb
 
 # Prepare Pulse Audio
-WORKDIR /tmp
-RUN apt-get source pulseaudio
-RUN apt-get build-dep -yy pulseaudio
-WORKDIR /tmp/pulseaudio-11.1
-RUN dpkg-buildpackage -rfakeroot -uc -b
+#WORKDIR /tmp
+#RUN apt-get source pulseaudio
+#RUN apt-get build-dep -yy pulseaudio
+#WORKDIR /tmp/pulseaudio-11.1
+#RUN dpkg-buildpackage -rfakeroot -uc -b
 
 # Build Pulse Audio module
 
-WORKDIR /tmp
-RUN wget https://github.com/neutrinolabs/pulseaudio-module-xrdp/archive/v"${XRDPPULSE_VER}".tar.gz -O pulseaudio-module-xrdp-"${XRDPPULSE_VER}".tar.gz
-RUN tar -zxf pulseaudio-module-xrdp-"${XRDPPULSE_VER}".tar.gz
-WORKDIR /tmp/pulseaudio-module-xrdp-"${XRDPPULSE_VER}"
-RUN ./bootstrap
-RUN ./configure PULSE_DIR=/tmp/pulseaudio-11.1
-RUN make
-RUN make install
+#WORKDIR /tmp
+#RUN wget https://github.com/neutrinolabs/pulseaudio-module-xrdp/archive/v"${XRDPPULSE_VER}".tar.gz -O pulseaudio-module-xrdp-"${XRDPPULSE_VER}".tar.gz
+#RUN tar -zxf pulseaudio-module-xrdp-"${XRDPPULSE_VER}".tar.gz
+#WORKDIR /tmp/pulseaudio-module-xrdp-"${XRDPPULSE_VER}"
+#RUN ./bootstrap
+#RUN ./configure PULSE_DIR=/tmp/pulseaudio-11.1
+#RUN make
+#RUN make install
 
 FROM base
-ARG ADDITIONAL_PACKAGES=""
-ENV ADDITIONAL_PACKAGES=${ADDITIONAL_PACKAGES}
-
+COPY requirements.txt /tmp
 ENV DEBIAN_FRONTEND noninteractive
 RUN apt update && apt -y full-upgrade && apt install -y \
   ca-certificates \
@@ -71,9 +69,9 @@ RUN apt update && apt -y full-upgrade && apt install -y \
   firefox \
   less \
   locales \
-  openssh-server \
-  pepperflashplugin-nonfree \
-  pulseaudio \
+  #openssh-server \
+  #pepperflashplugin-nonfree \
+  #pulseaudio \
   ssl-cert \
   sudo \
   supervisor \
@@ -84,24 +82,35 @@ RUN apt update && apt -y full-upgrade && apt install -y \
   xautolock \
   xfce4 \
   xfce4-clipman-plugin \
-  xfce4-cpugraph-plugin \
-  xfce4-netload-plugin \
-  xfce4-screenshooter \
-  xfce4-taskmanager \
+  #xfce4-cpugraph-plugin \
+  #xfce4-netload-plugin \
+  #xfce4-screenshooter \
+  #xfce4-taskmanager \
   xfce4-terminal \
   xfce4-xkb-plugin \
-  xprintidle \
-  $ADDITIONAL_PACKAGES \
-  && \
-  rm -rf /var/cache/apt /var/lib/apt/lists && \
-  mkdir -p /var/lib/xrdp-pulseaudio-installer
-COPY --from=builder /usr/lib/pulse-11.1/modules/module-xrdp-sink.so \
-                    /usr/lib/pulse-11.1/modules/module-xrdp-source.so \
-                    /var/lib/xrdp-pulseaudio-installer/
+  #xprintidle \
+  && dpkg-query -W -f='${Package}\n' > /tmp/a.txt \
+  && apt-get install -y python-pip python-dev build-essential \
+  && pip install setuptools wheel && pip install -r /tmp/requirements.txt \
+  && dpkg-query -W -f='${Package}\n' > /tmp/b.txt \
+  && apt-get remove -y $(diff --changed-group-format='%>' --unchanged-group-format='' /tmp/a.txt /tmp/b.txt | xargs ) \
+  && apt-get autoclean -y \
+  && apt-get autoremove -y \
+  && apt-get install -y libsdl1.2debian locales \
+  && locale-gen en_GB.UTF-8 \
+  && update-locale LC_ALL=en_GB.UTF-8 LANG=en_GB.UTF-8 \
+  && webdrivermanager firefox \
+  && rm -rf /tmp/* \ 
+  && rm -rf /var/cache/apt /var/lib/apt/lists 
+  #mkdir -p /var/lib/xrdp-pulseaudio-installer
+#COPY --from=builder /usr/lib/pulse-11.1/modules/module-xrdp-sink.so \
+#                    /usr/lib/pulse-11.1/modules/module-xrdp-source.so \
+#                    /var/lib/xrdp-pulseaudio-installer/
 COPY --from=builder /tmp/xrdp_${XRDP_VER}-1_amd64.deb /tmp/xorgxrdp_${XORGXRDP_VER}-1_amd64.deb /tmp/
 RUN dpkg -i /tmp/xrdp_"${XRDP_VER}"-1_amd64.deb /tmp/xorgxrdp_"${XORGXRDP_VER}"-1_amd64.deb && \
     rm -rf /tmp/xrdp_"${XRDP_VER}"-1_amd64.deb /tmp/xorgxrdp_"${XORGXRDP_VER}"-1_amd64.deb
 
+ADD skel.tar.gz /etc/skel/
 COPY bin /usr/bin
 COPY etc /etc
 COPY autostart /etc/xdg/autostart
@@ -111,14 +120,16 @@ RUN mkdir /var/run/dbus && \
   cp /etc/X11/xrdp/xorg.conf /etc/X11 && \
   sed -i "s/console/anybody/g" /etc/X11/Xwrapper.config && \
   sed -i "s/xrdp\/xorg/xorg/g" /etc/xrdp/sesman.ini && \
-  locale-gen en_US.UTF-8 && \
+  #locale-gen en_GB.UTF-8 && \
   echo "xfce4-session" > /etc/skel/.Xclients && \
-  cp -r /etc/ssh /ssh_orig && \
-  rm -rf /etc/ssh/* && \
+  chown -R root:root /etc/skel && \
+  #cp -r /etc/ssh /ssh_orig && \
+  #rm -rf /etc/ssh/* && \
   rm -rf /etc/xrdp/rsakeys.ini /etc/xrdp/*.pem
 
 # Docker config
 VOLUME ["/etc/ssh","/home"]
-EXPOSE 3389 22 9001
+#EXPOSE 3389 22 9001
+EXPOSE 3389 9001
 ENTRYPOINT ["/usr/bin/docker-entrypoint.sh"]
 CMD ["supervisord"]
